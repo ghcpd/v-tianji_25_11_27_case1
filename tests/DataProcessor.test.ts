@@ -27,7 +27,7 @@ describe('DataProcessor', () => {
   describe('validate() method', () => {
     test('returns validation result', () => {
       const data = {id: 1, name: 'John'};
-      const result = processor.validate(data);
+      const result = processor.validate(data) as any;
       expect(typeof result).toBe('object');
       expect(result.valid).toBe(true);
       expect(result.errors).toBeDefined();
@@ -35,10 +35,11 @@ describe('DataProcessor', () => {
   });
 
   describe('transform() method', () => {
-    test('transforms data', () => {
+    test('transforms data', async () => {
       const data = [{x: 1}, {x: 2}];
-      const result = processor.transform(data, item => ({y: item.x}));
-      expect(result).not.toBeInstanceOf(Promise);
+      const promise = processor.transform(data, item => ({y: item.x}));
+      expect(promise).toBeInstanceOf(Promise);
+      const result = await promise;
       expect(result).toEqual([{y: 1}, {y: 2}]);
     });
   });
