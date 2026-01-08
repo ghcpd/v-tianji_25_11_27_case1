@@ -1,0 +1,21 @@
+Prompt:
+Compare the provided documentation and source code, then produce the following:
+
+List all detected mismatches between the documentation and the actual implementation.
+
+For each mismatch, provide:
+
+The location and description from the documentation
+
+The location and actual behavior in the code
+
+Code evidence (relevant excerpts)
+
+Impact analysis (why this mismatch matters)
+
+Present the output in a clear, well-structured format (Markdown or JSON), readable and organized.
+
+Title: Documentation vs. Implementation Mismatch Analysis
+
+Description:
+Analyze the provided documentation and source code to identify all inconsistencies, outdated information, and behavior mismatches. Produce a structured report summarizing each discrepancy with evidence and impact.
