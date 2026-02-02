@@ -1,0 +1,306 @@
+{
+  "report": {
+    "title": "Documentation vs. Implementation Mismatch Analysis",
+    "date": "2025-11-27",
+    "project": "Data Processing Library",
+    "total_mismatches": 9,
+    "mismatches": [
+      {
+        "id": 1,
+        "component": "ApiClient.constructor",
+        "issue_type": "Wrong Default Value",
+        "severity": "HIGH",
+        "documentation": {
+          "file": "README.md",
+          "section": "ApiClient Constructor",
+          "description": "timeout default value is 5000ms",
+          "evidence": "timeout: 5000, // Request timeout in milliseconds (default: 5000)"
+        },
+        "implementation": {
+          "file": "src/ApiClient.ts",
+          "line": 17,
+          "description": "timeout default value is 30000ms",
+          "evidence": "this.timeout = config.timeout ?? 30000;",
+          "test_file": "tests/ApiClient.test.ts",
+          "test_evidence": "expect((client as any).timeout).toBe(30000);"
+        },
+        "impact": {
+          "description": "Consumers expecting 5-second timeouts will experience 30-second timeouts",
+          "consequences": [
+            "6x difference in timeout behavior",
+            "Performance-sensitive applications affected",
+            "Unexpected behavior differences between expectations and production",
+            "Breaking change if library is updated"
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "component": "DataProcessor.validate()",
+        "issue_type": "Return Type Mismatch",
+        "severity": "CRITICAL",
+        "documentation": {
+          "file": "README.md",
+          "section": "DataProcessor.validate() method",
+          "description": "Returns boolean (true if valid, false otherwise)",
+          "evidence": "Returns: `boolean` - `true` if valid, `false` otherwise\nExample: const isValid = processor.validate({id: 1, name: 'John'});\n// Returns: true"
+        },
+        "implementation": {
+          "file": "src/DataProcessor.ts",
+          "lines": "47-51",
+          "description": "Returns object with {valid, errors} properties, uses 'as any' to bypass type checking",
+          "evidence": "return {\n  valid: typeof data === 'object' && data !== null,\n  errors: typeof data === 'object' && data !== null ? [] : ['Data must be an object']\n} as any;",
+          "test_file": "tests/DataProcessor.test.ts",
+          "test_evidence": "expect(typeof result).toBe('object');\nexpect(result.valid).toBe(true);\nexpect(result.errors).toBeDefined();"
+        },
+        "impact": {
+          "description": "Type mismatch breaks boolean logic and type safety",
+          "consequences": [
+            "Consumers expect boolean, get object",
+            "Conditional 'if (processor.validate(data))' always truthy",
+            "Invalid data not caught: 'if (!processor.validate(data))' never true",
+            "Breaks TypeScript type safety",
+            "Uses 'as any' indicating intentional type bypass"
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "component": "DataProcessor.transform()",
+        "issue_type": "Return Type Mismatch",
+        "severity": "HIGH",
+        "documentation": {
+          "file": "README.md",
+          "section": "DataProcessor.transform() method",
+          "description": "Returns Promise<Array> - transformed array",
+          "evidence": "Returns: `Promise<Array>` - Transformed array\nExample: const result = await processor.transform([{x: 1}, {x: 2}], item => ({y: item.x}));"
+        },
+        "implementation": {
+          "file": "src/DataProcessor.ts",
+          "lines": "53-55",
+          "description": "Synchronous operation disguised as async - returns synchronous result",
+          "evidence": "async transform(data: any[], mapper: (item: any, index: number) => any): Promise<any[]> {\n  return data.map(mapper);  // Synchronous, not async\n}",
+          "test_file": "tests/DataProcessor.test.ts",
+          "test_evidence": "const result = processor.transform(data, item => ({y: item.x}));\nexpect(result).not.toBeInstanceOf(Promise);  // Returns array, not Promise"
+        },
+        "impact": {
+          "description": "Function promises async behavior that doesn't exist",
+          "consequences": [
+            "Synchronous operation disguised with async/await",
+            "Consumers await unnecessarily based on documentation",
+            "Test contradicts documentation (no await used)",
+            "Inconsistent with promises/async patterns",
+            "May cause confusion with error handling"
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "component": "DataProcessor.process()",
+        "issue_type": "Default Limit Behavior",
+        "severity": "HIGH",
+        "documentation": {
+          "file": "README.md",
+          "section": "DataProcessor.process() method - Options",
+          "description": "limit parameter defaults to unlimited",
+          "evidence": "`limit`: Maximum number of results to return (default: unlimited)"
+        },
+        "implementation": {
+          "file": "src/DataProcessor.ts",
+          "line": 37,
+          "description": "limit parameter defaults to 10 items",
+          "evidence": "const limit = options.limit !== undefined ? options.limit : 10;\nreturn result.slice(0, limit);",
+          "test_file": "tests/DataProcessor.test.ts",
+          "test_evidence": "const data = Array.from({length: 20}, (_, i) => ({id: i}));\nconst result = processor.process(data);\nexpect(result.length).toBe(10);"
+        },
+        "impact": {
+          "description": "Silent truncation of data without explicit configuration",
+          "consequences": [
+            "Consumers processing large datasets silently get only 10 items",
+            "Unexpected data loss without warning",
+            "Violates principle of least surprise",
+            "No error or warning raised",
+            "May cause data integrity issues"
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "component": "DataProcessor.merge()",
+        "issue_type": "Missing Feature - Duplicate Removal",
+        "severity": "HIGH",
+        "documentation": {
+          "file": "README.md",
+          "section": "DataProcessor.merge() method",
+          "description": "Merges arrays with duplicate removal",
+          "evidence": "Returns: Array of merged objects with duplicates removed\nExample: processor.merge([{id: 1}], [{id: 2}], [{id: 1}]);\n// Returns: [{id: 1}, {id: 2}]  (duplicate removed)"
+        },
+        "implementation": {
+          "file": "src/DataProcessor.ts",
+          "lines": "57-62",
+          "description": "Simply flattens arrays without removing duplicates",
+          "evidence": "merge(...arrays: any[][]): any[] {\n  const arraysToMerge = arrays.length === 1 && Array.isArray(arrays[0]) \n    ? arrays[0] \n    : arrays;\n  const merged = arraysToMerge.flat();\n  return merged;  // No deduplication\n}",
+          "test_file": "tests/DataProcessor.test.ts",
+          "test_evidence": "const result = processor.merge([{id: 1}], [{id: 1}], [{id: 2}]);\nexpect(result.length).toBe(3);  // All 3 items returned, duplicates NOT removed\nexpect(result.filter(item => item.id === 1).length).toBe(2);  // Duplicate present"
+        },
+        "impact": {
+          "description": "Deduplication feature promised but not implemented",
+          "consequences": [
+            "Documentation promises deduplication, implementation doesn't deliver",
+            "Consumers relying on automatic deduplication get incorrect data",
+            "Requires consumers to implement their own deduplication",
+            "Data integrity issue",
+            "Test contradicts documentation"
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "component": "ValidationUtils.isValidEmail()",
+        "issue_type": "Return Type Mismatch",
+        "severity": "CRITICAL",
+        "documentation": {
+          "file": "README.md",
+          "section": "ValidationUtils.isValidEmail() function",
+          "description": "Returns boolean (true if email is valid)",
+          "evidence": "Returns: `boolean` - `true` if email is valid\nExample: isValidEmail('user@example.com'); // Returns true\nisValidEmail('invalid-email'); // Returns false"
+        },
+        "implementation": {
+          "file": "src/utils/ValidationUtils.ts",
+          "lines": "13-17",
+          "description": "Returns object with {valid, message, email} properties, uses 'as any' to bypass type checking",
+          "evidence": "return {\n  valid: isValid,\n  message: isValid ? 'Valid email' : 'Invalid email format',\n  email: email\n} as any;",
+          "test_file": "tests/ValidationUtils.test.ts",
+          "test_evidence": "expect(typeof result).toBe('object');\nexpect(result).toHaveProperty('valid');\nexpect(result).toHaveProperty('message');\nexpect(result).toHaveProperty('email');"
+        },
+        "impact": {
+          "description": "Return type is object, not boolean as documented",
+          "consequences": [
+            "Conditional 'if (!isValidEmail(email))' will never be false",
+            "Objects are always truthy in JavaScript",
+            "Breaks type safety and logic flow",
+            "Consumers must access '.valid' property (undocumented)",
+            "Inconsistent with documentation examples"
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "component": "ValidationUtils.isValidUrl()",
+        "issue_type": "Behavior Mismatch",
+        "severity": "HIGH",
+        "documentation": {
+          "file": "README.md",
+          "section": "ValidationUtils.isValidUrl() function",
+          "description": "Only accepts absolute URLs (must start with http:// or https://). Rejects relative paths and localhost URLs",
+          "evidence": "Validates a URL. Only accepts absolute URLs (must start with http:// or https://).\nExample: isValidUrl('https://example.com'); // Returns true\nisValidUrl('/relative/path'); // Returns false\nisValidUrl('localhost:3000'); // Returns false"
+        },
+        "implementation": {
+          "file": "src/utils/ValidationUtils.ts",
+          "lines": "29-38",
+          "description": "Accepts relative paths, localhost URLs, and absolute URLs",
+          "evidence": "if (url.startsWith('/') || url.startsWith('./')) {\n  return true;  // Accepts relative paths\n}\nif (url.includes('localhost')) {\n  return true;  // Accepts localhost\n}\nnew URL(url);\nreturn true;",
+          "test_file": "tests/ValidationUtils.test.ts",
+          "test_evidence": "expect(isValidUrl('/api/users')).toBe(true);  // Relative path accepted\nexpect(isValidUrl('http://localhost:3000')).toBe(true);  // Localhost accepted"
+        },
+        "impact": {
+          "description": "Implementation is more permissive than documented",
+          "consequences": [
+            "Documentation explicitly states rejection criteria that implementation ignores",
+            "Consumers using documentation will have incorrect validation logic",
+            "Silent acceptance of URLs that should be rejected per documentation",
+            "Test contradicts documentation"
+          ]
+        }
+      },
+      {
+        "id": 8,
+        "component": "ValidationUtils.isValidPhone()",
+        "issue_type": "Format Parameter Ignored",
+        "severity": "HIGH",
+        "documentation": {
+          "file": "README.md",
+          "section": "ValidationUtils.isValidPhone() function",
+          "description": "Supports 'US' and 'International' formats; international format with '+' prefix should be accepted",
+          "evidence": "format (string): Phone format - `'US'` or `'International'` (default: `'US'`)\nExample: isValidPhone('+1-123-456-7890', 'International'); // Returns true"
+        },
+        "implementation": {
+          "file": "src/utils/ValidationUtils.ts",
+          "lines": "22-25",
+          "description": "Always uses US regex regardless of format parameter; rejects '+' prefix",
+          "evidence": "const usRegex = /^[\\d\\-\\(\\)\\s]+$/;  // Does not include '+'\nreturn usRegex.test(phone);  // Ignores format parameter",
+          "test_file": "tests/ValidationUtils.test.ts",
+          "test_evidence": "const intlPhone = '+1-123-456-7890';\nconst result2 = isValidPhone(intlPhone, 'International');\nexpect(result2).toBe(false);  // Rejects international format"
+        },
+        "impact": {
+          "description": "Format parameter is completely ignored",
+          "consequences": [
+            "Documentation claims international format support, implementation doesn't provide it",
+            "Format parameter accepted but ignored (misleading API)",
+            "International phone numbers with '+' prefix are rejected",
+            "Consumers trying to validate international numbers will fail",
+            "Test proves documentation is incorrect"
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "component": "ValidationUtils.isValidDate()",
+        "issue_type": "Undocumented Feature - Extended Format Support",
+        "severity": "MEDIUM",
+        "documentation": {
+          "file": "README.md",
+          "section": "ValidationUtils.isValidDate() function",
+          "description": "Only accepts ISO format (YYYY-MM-DD); US and EU formats rejected",
+          "evidence": "Validates a date string. Only accepts ISO format (YYYY-MM-DD).\nExample: isValidDate('01/15/2024'); // Returns false (not ISO format)\nisValidDate('15.01.2024'); // Returns false (not ISO format)"
+        },
+        "implementation": {
+          "file": "src/utils/ValidationUtils.ts",
+          "lines": "41-46",
+          "description": "Accepts ISO (YYYY-MM-DD), US (MM/DD/YYYY), and EU (DD.MM.YYYY) formats",
+          "evidence": "const isoRegex = /^\\d{4}-\\d{2}-\\d{2}$/;\nconst usRegex = /^\\d{2}\\/\\d{2}\\/\\d{4}$/;  // US format\nconst euRegex = /^\\d{2}\\.\\d{2}\\.\\d{4}$/;  // EU format\nreturn isoRegex.test(date) || usRegex.test(date) || euRegex.test(date);",
+          "test_file": "tests/ValidationUtils.test.ts",
+          "test_evidence": "expect(isValidDate('01/15/2024')).toBe(true);  // US format accepted\nexpect(isValidDate('15.01.2024')).toBe(true);  // EU format accepted"
+        },
+        "impact": {
+          "description": "Documentation understates function capability",
+          "consequences": [
+            "Implementation is more permissive than documented",
+            "Consumers may unnecessarily restrict to ISO format",
+            "Documentation is incomplete but not breaking (implementation is backwards-compatible)",
+            "May cause confusion when broader format support exists",
+            "Test proves actual behavior exceeds documentation"
+          ]
+        }
+      }
+    ]
+  },
+  "summary": {
+    "critical_issues": 2,
+    "high_priority_issues": 6,
+    "medium_priority_issues": 1,
+    "total_affected_components": 7,
+    "affected_files": [
+      "src/ApiClient.ts",
+      "src/DataProcessor.ts",
+      "src/utils/ValidationUtils.ts"
+    ],
+    "recommendations": {
+      "critical": [
+        "DataProcessor.validate() - Return actual boolean or update documentation",
+        "isValidEmail() - Return actual boolean or update documentation"
+      ],
+      "high": [
+        "ApiClient timeout default - Align with 5000ms or update documentation",
+        "DataProcessor.transform() - Make truly async or remove Promise type",
+        "DataProcessor.process() limit - Remove default limit or document it",
+        "DataProcessor.merge() - Add deduplication or update documentation",
+        "isValidUrl() - Document acceptance of relative paths and localhost",
+        "isValidPhone() - Implement international format support or document US-only"
+      ],
+      "medium": [
+        "isValidDate() - Document support for US and EU formats"
+      ]
+    }
+  }
+}
